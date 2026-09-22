@@ -20,7 +20,8 @@ const ownerTable: Record<AttachmentOwnerType, string> = {
   BATCH: "batches",
   COLOR_CHANGE: "color_changes",
   PROJECT: "projects",
-  CONSUMPTION: "consumptions"
+  CONSUMPTION: "consumptions",
+  INSPECTION: "incoming_inspections"
 };
 
 function hasExpectedMagic(buffer: Buffer, mime: string): boolean {

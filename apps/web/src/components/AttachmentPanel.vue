@@ -4,7 +4,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { request, ApiError } from "@/lib/api";
 
 type Attachment = { id: string; originalName: string; mimeType: string; byteSize: string; createdAt: string };
-const props = defineProps<{ ownerType: "BATCH" | "PROJECT" | "COLOR_CHANGE" | "CONSUMPTION"; ownerId: string; attachments: Attachment[] }>();
+const props = defineProps<{ ownerType: "BATCH" | "PROJECT" | "COLOR_CHANGE" | "CONSUMPTION" | "INSPECTION"; ownerId: string; attachments: Attachment[] }>();
 const emit = defineEmits<{ changed: [] }>();
 const uploading = ref(false);
 

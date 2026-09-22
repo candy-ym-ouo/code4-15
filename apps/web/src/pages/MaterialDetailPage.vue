@@ -44,7 +44,7 @@ onMounted(load);
         <div><h1>{{ material.name }}</h1><p>{{ material.code || "无材料编码" }} · {{ material.subtype || "未分类" }}</p></div>
         <div>
           <el-button v-if="!material.archivedAt" @click="router.push(`/materials/${material.id}/edit`)">编辑</el-button>
-          <el-button type="primary" @click="router.push({ path: '/batches/new', query: { materialId: material.id } })">新批次入库</el-button>
+          <el-button type="primary" @click="router.push({ path: '/inspections/new', query: { materialId: material.id } })">来料质检</el-button>
           <el-button v-if="!material.archivedAt" type="danger" plain @click="archive">归档</el-button>
         </div>
       </header>
@@ -76,7 +76,7 @@ onMounted(load);
           <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag>{{ statusLabels[row.status] || row.status }}</el-tag></template></el-table-column>
         </el-table>
         <el-empty v-if="material.batches.length === 0" description="该材料还没有批次">
-          <el-button type="primary" @click="router.push({ path: '/batches/new', query: { materialId: material.id } })">录入第一批材料</el-button>
+          <el-button type="primary" @click="router.push({ path: '/inspections/new', query: { materialId: material.id } })">登记第一批来料</el-button>
         </el-empty>
       </section>
     </template>

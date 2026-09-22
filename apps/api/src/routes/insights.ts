@@ -24,12 +24,14 @@ function toCsv(rows: Record<string, unknown>[]): string {
 
 export async function insightRoutes(app: FastifyInstance): Promise<void> {
   app.get("/dashboard", async () => {
-    const [summary, lowStock, expiring, movements, projects] = await Promise.all([
+    const [summary, lowStock, expiring, movements, projects, pendingInspections] = await Promise.all([
       pool.query(
         `SELECT
           (SELECT count(*)::int FROM materials WHERE archived_at IS NULL) AS "materialCount",
           (SELECT count(*)::int FROM batches WHERE status = 'ACTIVE' AND remaining_quantity > 0) AS "activeBatchCount",
           (SELECT count(*)::int FROM batches WHERE status = 'DEPLETED') AS "depletedBatchCount",
+          (SELECT count(*)::int FROM incoming_inspections WHERE status = 'PENDING') AS "pendingInspectionCount",
+          (SELECT count(*)::int FROM incoming_inspections WHERE status = 'REJECTED') AS "rejectedInspectionCount",
           (SELECT count(*)::int FROM projects WHERE status = 'IN_PROGRESS' AND archived_at IS NULL) AS "activeProjectCount",
           (SELECT count(*)::int FROM consumptions WHERE status = 'ACTIVE' AND consumed_at >= date_trunc('month', now())) AS "consumptionCountThisMonth"`
       ),
@@ -65,6 +67,16 @@ export async function insightRoutes(app: FastifyInstance): Promise<void> {
            FROM projects p
           WHERE p.status IN ('PLANNED', 'IN_PROGRESS') AND p.archived_at IS NULL
           ORDER BY CASE p.status WHEN 'IN_PROGRESS' THEN 0 ELSE 1 END, p.due_date ASC NULLS LAST LIMIT 10`
+      ),
+      pool.query(
+        `SELECT i.id, i.inspection_code AS "inspectionCode", m.name AS "materialName",
+                i.delivered_quantity::text AS "deliveredQuantity", i.stock_unit AS "stockUnit",
+                i.received_at AS "receivedAt",
+                (SELECT count(*)::int FROM inspection_samples s WHERE s.inspection_id = i.id) AS "sampleCount",
+                (SELECT count(*)::int FROM inspection_defects d WHERE d.inspection_id = i.id) AS "defectCount"
+           FROM incoming_inspections i JOIN materials m ON m.id = i.material_id
+          WHERE i.status = 'PENDING'
+          ORDER BY i.received_at ASC, i.created_at ASC LIMIT 10`
       )
     ]);
     return {
@@ -74,6 +86,7 @@ export async function insightRoutes(app: FastifyInstance): Promise<void> {
         expiring: expiring.rows,
         recentMovements: movements.rows,
         activeProjects: projects.rows,
+        pendingInspections: pendingInspections.rows,
         generatedAt: new Date().toISOString()
       }
     };
@@ -135,7 +148,7 @@ export async function insightRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get("/exports/workspace.json", async (_request, reply) => {
-    const [sources, locations, materials, batches, movements, projects, requirements, consumptions, colorChanges, attachments, auditLogs] = await Promise.all([
+    const [sources, locations, materials, batches, movements, projects, requirements, consumptions, colorChanges, attachments, auditLogs, inspections, inspectionSamples, inspectionDefects, inspectionDispositions] = await Promise.all([
       pool.query("SELECT * FROM sources ORDER BY created_at"),
       pool.query("SELECT * FROM storage_locations ORDER BY created_at"),
       pool.query("SELECT * FROM materials ORDER BY created_at"),
@@ -146,12 +159,16 @@ export async function insightRoutes(app: FastifyInstance): Promise<void> {
       pool.query("SELECT * FROM consumptions ORDER BY created_at"),
       pool.query("SELECT * FROM color_changes ORDER BY created_at"),
       pool.query("SELECT * FROM attachments ORDER BY created_at"),
-      pool.query("SELECT * FROM audit_logs ORDER BY created_at")
+      pool.query("SELECT * FROM audit_logs ORDER BY created_at"),
+      pool.query("SELECT * FROM incoming_inspections ORDER BY created_at"),
+      pool.query("SELECT * FROM inspection_samples ORDER BY created_at"),
+      pool.query("SELECT * FROM inspection_defects ORDER BY created_at"),
+      pool.query("SELECT * FROM inspection_dispositions ORDER BY created_at")
     ]);
     reply.header("Content-Disposition", `attachment; filename="handcraft-workspace-${new Date().toISOString().slice(0, 10)}.json"`);
     return reply.send({
       exportedAt: new Date().toISOString(),
-      schemaVersion: 1,
+      schemaVersion: 2,
       sources: sources.rows,
       locations: locations.rows,
       materials: materials.rows,
@@ -162,6 +179,10 @@ export async function insightRoutes(app: FastifyInstance): Promise<void> {
       consumptions: consumptions.rows,
       colorChanges: colorChanges.rows,
       attachments: attachments.rows,
+      incomingInspections: inspections.rows,
+      inspectionSamples: inspectionSamples.rows,
+      inspectionDefects: inspectionDefects.rows,
+      inspectionDispositions: inspectionDispositions.rows,
       auditLogs: auditLogs.rows
     });
   });

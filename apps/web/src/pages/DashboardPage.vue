@@ -8,6 +8,8 @@ type Dashboard = {
     materialCount: number;
     activeBatchCount: number;
     depletedBatchCount: number;
+    pendingInspectionCount: number;
+    rejectedInspectionCount: number;
     activeProjectCount: number;
     consumptionCountThisMonth: number;
   };
@@ -15,6 +17,7 @@ type Dashboard = {
   expiring: Array<{ id: string; materialName: string; batchCode: string | null; expiryAt: string; remainingQuantity: string; stockUnit: string; daysRemaining: number }>;
   recentMovements: Array<{ id: string; type: string; signedQuantity: string; stockUnit: string; afterQuantity: string; createdAt: string; batchId: string; materialName: string; batchCode: string | null }>;
   activeProjects: Array<{ id: string; name: string; craftType: string; status: string; dueDate: string | null; requirementCount: number; consumptionCount: number }>;
+  pendingInspections: Array<{ id: string; inspectionCode: string | null; materialName: string; deliveredQuantity: string; stockUnit: string; receivedAt: string; sampleCount: number; defectCount: number }>;
   generatedAt: string;
 };
 
@@ -54,7 +57,24 @@ onMounted(load);
         <article class="stat-card"><small>有库存批次</small><strong>{{ data.summary.activeBatchCount }}</strong></article>
         <article class="stat-card"><small>进行中项目</small><strong>{{ data.summary.activeProjectCount }}</strong></article>
         <article class="stat-card"><small>已耗尽批次</small><strong>{{ data.summary.depletedBatchCount }}</strong></article>
+        <article class="stat-card"><small>待检来料</small><strong>{{ data.summary.pendingInspectionCount }}</strong></article>
         <article class="stat-card"><small>本月消耗笔数</small><strong>{{ data.summary.consumptionCountThisMonth }}</strong></article>
+      </section>
+
+      <section v-if="data.pendingInspections.length" class="panel" style="margin-top:16px;border-left:4px solid var(--el-color-warning)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h2 style="margin:0">待检来料（{{ data.summary.pendingInspectionCount }}）</h2>
+          <router-link to="/inspections">前往质检 →</router-link>
+        </div>
+        <el-table :data="data.pendingInspections" size="small" style="margin-top:8px">
+          <el-table-column label="材料">
+            <template #default="{ row }"><router-link :to="`/inspections/${row.id}`"><strong>{{ row.materialName }}</strong></router-link><div class="muted">{{ row.inspectionCode || "无检验单号" }}</div></template>
+          </el-table-column>
+          <el-table-column label="到货数量" width="150"><template #default="{ row }"><span class="amount">{{ row.deliveredQuantity }} {{ row.stockUnit }}</span></template></el-table-column>
+          <el-table-column label="样本/缺陷" width="110"><template #default="{ row }">{{ row.sampleCount }} / {{ row.defectCount }}</template></el-table-column>
+          <el-table-column label="到货日期" prop="receivedAt" width="120" />
+          <el-table-column label="操作" width="110"><template #default="{ row }"><el-button link type="primary" @click="$router.push(`/inspections/${row.id}`)">检验处置</el-button></template></el-table-column>
+        </el-table>
       </section>
 
       <div class="two-column" style="margin-top: 16px">

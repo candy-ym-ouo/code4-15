@@ -138,3 +138,106 @@ export const movementLabels: Record<string, string> = {
   ADJUSTMENT_OUT: "盘减",
   REVERSAL: "撤销恢复"
 };
+
+export type Inspection = {
+  id: string;
+  inspectionCode: string | null;
+  materialId: string;
+  materialName: string;
+  materialCode: string | null;
+  craftTypes: string[];
+  sourceId: string | null;
+  sourceName: string | null;
+  sourceNote: string | null;
+  locationId: string | null;
+  locationName: string | null;
+  receivedAt: string;
+  expiryAt: string | null;
+  deliveredQuantity: string;
+  entryUnit: string;
+  stockUnit: string;
+  totalCost: string | null;
+  currency: string | null;
+  initialColorName: string | null;
+  initialColorHex: string | null;
+  batchCode: string | null;
+  notes: string | null;
+  status: "PENDING" | "ACCEPTED" | "CONCESSION" | "REJECTED";
+  dispositionedAt: string | null;
+  batchId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+  sampleCount?: number;
+  defectCount?: number;
+  defectQuantity?: string;
+};
+
+export type InspectionSample = {
+  id: string;
+  sampleCode: string | null;
+  sampleQuantity: string;
+  stockUnit: string;
+  inspectionItem: string | null;
+  result: "PENDING" | "PASS" | "FAIL";
+  inspectedAt: string;
+  inspectorName: string | null;
+  notes: string | null;
+  createdAt: string;
+};
+
+export type InspectionDefect = {
+  id: string;
+  sampleId: string | null;
+  defectType: string;
+  severity: "MINOR" | "MAJOR" | "CRITICAL";
+  defectQuantity: string;
+  stockUnit: string | null;
+  description: string | null;
+  createdAt: string;
+};
+
+export type InspectionDisposition = {
+  id?: string;
+  inspectionId?: string;
+  disposition: "ACCEPTED" | "CONCESSION" | "REJECTED";
+  acceptedQuantity: string | null;
+  stockUnit?: string | null;
+  reason: string;
+  batchId: string | null;
+  createdAt?: string;
+};
+
+export type InspectionDetail = Inspection & {
+  samples: InspectionSample[];
+  defects: InspectionDefect[];
+  disposition: InspectionDisposition | null;
+  attachments: Attachment[];
+};
+
+export type Attachment = {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  byteSize: string;
+  createdAt: string;
+};
+
+export const inspectionStatusLabels: Record<string, string> = {
+  PENDING: "待检验",
+  ACCEPTED: "合格接收",
+  CONCESSION: "让步接收",
+  REJECTED: "驳回"
+};
+
+export const defectSeverityLabels: Record<string, string> = {
+  MINOR: "轻微",
+  MAJOR: "主要",
+  CRITICAL: "严重"
+};
+
+export const sampleResultLabels: Record<string, string> = {
+  PENDING: "待判定",
+  PASS: "合格",
+  FAIL: "不合格"
+};

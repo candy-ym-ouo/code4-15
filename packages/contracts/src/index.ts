@@ -37,8 +37,20 @@ export const colorChangeTypes = [
 ] as const;
 export type ColorChangeType = (typeof colorChangeTypes)[number];
 
-export const attachmentOwnerTypes = ["BATCH", "COLOR_CHANGE", "PROJECT", "CONSUMPTION"] as const;
+export const attachmentOwnerTypes = ["BATCH", "COLOR_CHANGE", "PROJECT", "CONSUMPTION", "INSPECTION"] as const;
 export type AttachmentOwnerType = (typeof attachmentOwnerTypes)[number];
+
+export const inspectionStatuses = ["PENDING", "ACCEPTED", "CONCESSION", "REJECTED"] as const;
+export type InspectionStatus = (typeof inspectionStatuses)[number];
+
+export const inspectionDispositions = ["ACCEPTED", "CONCESSION", "REJECTED"] as const;
+export type InspectionDisposition = (typeof inspectionDispositions)[number];
+
+export const defectSeverities = ["MINOR", "MAJOR", "CRITICAL"] as const;
+export type DefectSeverity = (typeof defectSeverities)[number];
+
+export const inspectionSampleResults = ["PENDING", "PASS", "FAIL"] as const;
+export type InspectionSampleResult = (typeof inspectionSampleResults)[number];
 
 export const unitFamilies = {
   g: { family: "MASS", base: "g", factor: "1" },
@@ -251,6 +263,83 @@ export const reverseConsumptionSchema = z.object({
 export const projectStatusSchema = z.object({
   status: z.enum(projectStatuses),
   version: z.number().int().positive()
+});
+
+// 来料登记：尚未质检，不产生批次、不产生库存流水。
+export const inspectionCreateSchema = z.object({
+  materialId: z.string().uuid(),
+  inspectionCode: z.string().trim().max(64).nullable().optional(),
+  sourceId: z.string().uuid().nullable().optional(),
+  sourceNote: z.string().trim().max(200).nullable().optional(),
+  locationId: z.string().uuid().nullable().optional(),
+  receivedAt: z.string().date(),
+  expiryAt: z.string().date().nullable().optional(),
+  deliveredQuantity: positiveQuantity,
+  entryUnit: z.enum(stockUnits),
+  totalCost: moneyAmount.nullable().optional(),
+  currency: z.string().trim().regex(/^[A-Za-z]{3}$/, "币种必须是 3 位字母代码").transform((value) => value.toUpperCase()).nullable().optional(),
+  initialColorName: z.string().trim().max(80).nullable().optional(),
+  initialColorHex: z.union([colorHex, z.literal("")]).nullable().optional(),
+  batchCode: z.string().trim().max(64).nullable().optional(),
+  notes: z.string().trim().max(5000).nullable().optional()
+}).refine((value) => !value.expiryAt || value.expiryAt >= value.receivedAt, {
+  message: "有效期不能早于到货日期",
+  path: ["expiryAt"]
+});
+
+// 检验单上的非业务字段可在处置前补充。
+export const inspectionPatchSchema = z.object({
+  version: z.number().int().positive(),
+  sourceId: z.string().uuid().nullable().optional(),
+  sourceNote: z.string().trim().max(200).nullable().optional(),
+  locationId: z.string().uuid().nullable().optional(),
+  expiryAt: z.string().date().nullable().optional(),
+  totalCost: moneyAmount.nullable().optional(),
+  currency: z.string().trim().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()).nullable().optional(),
+  batchCode: z.string().trim().max(64).nullable().optional(),
+  notes: z.string().trim().max(5000).nullable().optional()
+});
+
+export const inspectionSampleCreateSchema = z.object({
+  sampleCode: z.string().trim().max(64).nullable().optional(),
+  sampleQuantity: positiveQuantity,
+  unit: z.enum(stockUnits),
+  inspectionItem: z.string().trim().min(1).max(160).nullable().optional(),
+  result: z.enum(inspectionSampleResults).default("PENDING"),
+  inspectedAt: z.string().datetime({ offset: true }).optional(),
+  inspectorName: z.string().trim().max(80).nullable().optional(),
+  notes: z.string().trim().max(3000).nullable().optional()
+});
+
+export const inspectionDefectCreateSchema = z.object({
+  sampleId: z.string().uuid().nullable().optional(),
+  defectType: z.string().trim().min(1).max(80),
+  severity: z.enum(defectSeverities).default("MINOR"),
+  defectQuantity: decimalQuantity,
+  unit: z.enum(stockUnits).nullable().optional(),
+  description: z.string().trim().max(3000).nullable().optional()
+}).refine((value) => {
+  const hasQuantity = compareQuantities(value.defectQuantity, "0") > 0;
+  return hasQuantity ? Boolean(value.unit) : true;
+}, {
+  message: "记录缺陷数量时必须提供单位",
+  path: ["unit"]
+});
+
+// 处置：终态动作，仅可执行一次。
+// ACCEPTED 合格接收：按到货全部数量入库；
+// CONCESSION 让步接收：按 acceptedQuantity（必须小于到货量）入库；
+// REJECTED 驳回：不入库、不产生批次。
+// acceptedQuantity 使用到货登记时的输入单位（entryUnit）计量。
+export const inspectionDispositionSchema = z.object({
+  disposition: z.enum(inspectionDispositions),
+  acceptedQuantity: positiveQuantity.nullable().optional(),
+  unit: z.enum(stockUnits).nullable().optional(),
+  reason: z.string().trim().min(3).max(2000),
+  version: z.number().int().positive()
+}).refine((value) => value.disposition !== "CONCESSION" || value.acceptedQuantity !== null && value.acceptedQuantity !== undefined, {
+  message: "让步接收必须填写让步接收入库数量",
+  path: ["acceptedQuantity"]
 });
 
 export type Pagination = {

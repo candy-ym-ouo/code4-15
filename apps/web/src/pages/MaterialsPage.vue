@@ -96,7 +96,7 @@ onMounted(() => {
           <template #default="{ row }">
             <el-button link type="primary" @click="router.push(`/materials/${row.id}`)">详情</el-button>
             <el-button link @click="router.push(`/materials/${row.id}/edit`)">编辑</el-button>
-            <el-button link type="success" @click="router.push({ path: '/batches/new', query: { materialId: row.id } })">入库</el-button>
+            <el-button link type="success" @click="router.push({ path: '/inspections/new', query: { materialId: row.id } })">来料质检</el-button>
           </template>
         </el-table-column>
       </el-table>

@@ -8,7 +8,7 @@
 - 时间：ISO 8601，推荐包含时区偏移。
 - 会话：HttpOnly Cookie `handcraft_session`。
 - 分页：`page`、`pageSize`，最大 100。
-- 幂等：批次入库、库存调整和材料消耗支持 `Idempotency-Key`。
+- 幂等：批次入库、库存调整、材料消耗，以及来料检验的样本、缺陷和处置支持 `Idempotency-Key`。
 - 乐观锁：更新请求携带 `version`。
 
 成功响应：
@@ -110,6 +110,9 @@
 | POST | `/batches/:id/adjustments` | 库存调整 |
 | POST | `/batches/:id/archive` | 归档无余额批次 |
 
+> 来料正常入库必须先经过“来料质检”流程（见第 5a 节）：只有 `ACCEPTED`（合格接收）或
+> `CONCESSION`（让步接收）才会生成批次；`REJECTED`（驳回）不产生批次。
+
 创建批次：
 
 ```json
@@ -138,6 +141,87 @@
 ```
 
 同一 `Idempotency-Key` 重试不会重复调整。
+
+## 5a. 来料质检与让步接收
+
+到货先创建检验单（`PENDING`），再登记样本与缺陷，最后做一次性处置：
+
+- `ACCEPTED`：合格接收，按到货全部数量生成批次与 `OPENING` 流水（`referenceType=INSPECTION`）。
+- `CONCESSION`：让步接收，按 `acceptedQuantity`（必须小于到货数量）生成批次入库。
+- `REJECTED`：驳回，**不生成批次、不写库存流水**。
+
+处置是终态动作，仅可执行一次。接口通过 `SELECT ... FOR UPDATE` 行锁与状态判断串行化并发处置，
+数据库层还有“一检一处置”部分唯一索引兜底；并发调用时第一个生效，其余返回
+`409 INSPECTION_ALREADY_DISPOSITIONED`。处置、样本和缺陷接口均支持 `Idempotency-Key`。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET/POST | `/inspections` | 检验单查询或来料登记（不产生批次） |
+| GET/PATCH | `/inspections/:id` | 检验详情（含样本、缺陷、处置、附件）或补充非业务字段 |
+| POST | `/inspections/:id/samples` | 登记检验样本（仅 `PENDING`） |
+| POST | `/inspections/:id/defects` | 登记缺陷（仅 `PENDING`） |
+| POST | `/inspections/:id/disposition` | 终态处置（仅一次） |
+
+检验列表查询参数：`q`、`status=PENDING|ACCEPTED|CONCESSION|REJECTED`、`materialId`、`sourceId`、
+`locationId`、`from`、`to`。
+
+来料登记（数量按材料库存单位换算存储）：
+
+```json
+{
+  "materialId": "uuid",
+  "inspectionCode": "IQC-20260922-01",
+  "sourceId": "uuid",
+  "locationId": "uuid",
+  "receivedAt": "2026-09-22",
+  "deliveredQuantity": "1",
+  "entryUnit": "kg",
+  "totalCost": "120.00",
+  "currency": "CNY",
+  "batchCode": "B-20260922-01"
+}
+```
+
+样本：
+
+```json
+{ "sampleCode": "S-1", "sampleQuantity": "200", "unit": "g", "inspectionItem": "含水率", "result": "FAIL" }
+```
+
+缺陷（`defectQuantity` 为 0 时可省略 `unit`；严重度 `MINOR|MAJOR|CRITICAL`）：
+
+```json
+{ "sampleId": "uuid", "defectType": "受潮结块", "severity": "MAJOR", "defectQuantity": "100", "unit": "g" }
+```
+
+合格接收 / 驳回：
+
+```json
+{ "disposition": "ACCEPTED", "reason": "抽检全部合格", "version": 1 }
+```
+
+```json
+{ "disposition": "REJECTED", "reason": "严重受潮霉变，整批驳回", "version": 1 }
+```
+
+让步接收（`acceptedQuantity` 使用 `unit` 计量，服务端换算为库存单位；必须大于 0 且小于到货量）：
+
+```json
+{ "disposition": "CONCESSION", "acceptedQuantity": "900", "unit": "g", "reason": "轻微色差，让步放行用于非关键部位", "version": 1 }
+```
+
+成功处置响应：
+
+```json
+{
+  "data": {
+    "disposition": { "inspectionId": "uuid", "disposition": "CONCESSION", "acceptedQuantity": "900.000000", "stockUnit": "g", "batchId": "uuid" },
+    "batch": { "id": "uuid" }
+  }
+}
+```
+
+驳回时 `disposition.batchId` 为 `null`，且 `batch` 为 `null`。检验单支持 `INSPECTION` 类型图片附件。
 
 ## 6. 项目与需求
 
@@ -236,7 +320,7 @@
 
 附件表单字段：
 
-- `ownerType`：`BATCH`、`COLOR_CHANGE`、`PROJECT` 或 `CONSUMPTION`
+- `ownerType`：`BATCH`、`COLOR_CHANGE`、`PROJECT`、`CONSUMPTION` 或 `INSPECTION`
 - `ownerId`
 - `file`
 

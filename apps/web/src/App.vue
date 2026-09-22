@@ -15,6 +15,7 @@ onUnmounted(() => window.removeEventListener("handcraft:unauthorized", handleUna
 const activeMenu = computed(() => {
   if (route.path.startsWith("/materials")) return "/materials";
   if (route.path.startsWith("/batches")) return "/batches";
+  if (route.path.startsWith("/inspections")) return "/inspections";
   if (route.path.startsWith("/projects")) return "/projects";
   if (route.path.startsWith("/consumptions")) return "/consumptions";
   if (route.path.startsWith("/sources")) return "/sources";
@@ -57,6 +58,7 @@ async function logout() {
         <el-menu-item index="/"><el-icon><DataAnalysis /></el-icon><span>仪表盘</span></el-menu-item>
         <el-menu-item index="/materials"><el-icon><Box /></el-icon><span>材料档案</span></el-menu-item>
         <el-menu-item index="/batches"><el-icon><Collection /></el-icon><span>批次库存</span></el-menu-item>
+        <el-menu-item index="/inspections"><el-icon><Document /></el-icon><span>来料质检</span></el-menu-item>
         <el-menu-item index="/projects"><el-icon><FolderOpened /></el-icon><span>项目</span></el-menu-item>
         <el-menu-item index="/consumptions"><el-icon><Document /></el-icon><span>消耗记录</span></el-menu-item>
         <el-menu-item index="/sources"><el-icon><Tickets /></el-icon><span>来源</span></el-menu-item>
