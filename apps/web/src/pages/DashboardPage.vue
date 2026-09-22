@@ -9,6 +9,8 @@ type Dashboard = {
     activeBatchCount: number;
     depletedBatchCount: number;
     activeProjectCount: number;
+    pendingInspectionCount: number;
+    concessionCount: number;
     consumptionCountThisMonth: number;
   };
   lowStock: Array<{ id: string; name: string; remainingQuantity: string; stockUnit: string; lowStockThreshold: string }>;
@@ -52,6 +54,8 @@ onMounted(load);
       <section class="stat-grid">
         <article class="stat-card"><small>材料档案</small><strong>{{ data.summary.materialCount }}</strong></article>
         <article class="stat-card"><small>有库存批次</small><strong>{{ data.summary.activeBatchCount }}</strong></article>
+        <article class="stat-card"><small>待质检来料</small><strong><router-link to="/inspections">{{ data.summary.pendingInspectionCount }}</router-link></strong></article>
+        <article class="stat-card"><small>让步接收批次</small><strong>{{ data.summary.concessionCount }}</strong></article>
         <article class="stat-card"><small>进行中项目</small><strong>{{ data.summary.activeProjectCount }}</strong></article>
         <article class="stat-card"><small>已耗尽批次</small><strong>{{ data.summary.depletedBatchCount }}</strong></article>
         <article class="stat-card"><small>本月消耗笔数</small><strong>{{ data.summary.consumptionCountThisMonth }}</strong></article>

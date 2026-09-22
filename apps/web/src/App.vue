@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { Box, Collection, DataAnalysis, Document, FolderOpened, Location, Setting, Tickets } from "@element-plus/icons-vue";
+import { Box, CircleCheck, Collection, DataAnalysis, Document, FolderOpened, Location, Setting, Tickets } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { useAuthStore } from "@/stores/auth";
 
@@ -14,6 +14,7 @@ onUnmounted(() => window.removeEventListener("handcraft:unauthorized", handleUna
 
 const activeMenu = computed(() => {
   if (route.path.startsWith("/materials")) return "/materials";
+  if (route.path.startsWith("/inspections")) return "/inspections";
   if (route.path.startsWith("/batches")) return "/batches";
   if (route.path.startsWith("/projects")) return "/projects";
   if (route.path.startsWith("/consumptions")) return "/consumptions";
@@ -56,6 +57,7 @@ async function logout() {
       <el-menu :default-active="activeMenu" router class="side-menu">
         <el-menu-item index="/"><el-icon><DataAnalysis /></el-icon><span>仪表盘</span></el-menu-item>
         <el-menu-item index="/materials"><el-icon><Box /></el-icon><span>材料档案</span></el-menu-item>
+        <el-menu-item index="/inspections"><el-icon><CircleCheck /></el-icon><span>来料质检</span></el-menu-item>
         <el-menu-item index="/batches"><el-icon><Collection /></el-icon><span>批次库存</span></el-menu-item>
         <el-menu-item index="/projects"><el-icon><FolderOpened /></el-icon><span>项目</span></el-menu-item>
         <el-menu-item index="/consumptions"><el-icon><Document /></el-icon><span>消耗记录</span></el-menu-item>

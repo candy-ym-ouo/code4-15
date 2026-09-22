@@ -46,8 +46,8 @@ onMounted(() => {
 <template>
   <div>
     <header class="page-header">
-      <div><h1>批次库存</h1><p>每次实际取得、拆分或保留的材料都以独立批次核算。</p></div>
-      <el-button type="primary" @click="router.push('/batches/new')">新批次入库</el-button>
+      <div><h1>批次库存</h1><p>批次从来料质检产生：质检合格或让步接收后自动入库。</p></div>
+      <el-button type="primary" @click="router.push('/inspections/new')">来料报检</el-button>
     </header>
     <section class="toolbar">
       <el-form :inline="true" @submit.prevent="load(1)">

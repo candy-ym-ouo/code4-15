@@ -31,6 +31,8 @@ export async function insightRoutes(app: FastifyInstance): Promise<void> {
           (SELECT count(*)::int FROM batches WHERE status = 'ACTIVE' AND remaining_quantity > 0) AS "activeBatchCount",
           (SELECT count(*)::int FROM batches WHERE status = 'DEPLETED') AS "depletedBatchCount",
           (SELECT count(*)::int FROM projects WHERE status = 'IN_PROGRESS' AND archived_at IS NULL) AS "activeProjectCount",
+          (SELECT count(*)::int FROM inspections WHERE status IN ('PENDING', 'INSPECTING')) AS "pendingInspectionCount",
+          (SELECT count(*)::int FROM inspections WHERE status = 'CONCESSION_ACCEPTED') AS "concessionCount",
           (SELECT count(*)::int FROM consumptions WHERE status = 'ACTIVE' AND consumed_at >= date_trunc('month', now())) AS "consumptionCountThisMonth"`
       ),
       pool.query(
@@ -135,10 +137,13 @@ export async function insightRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get("/exports/workspace.json", async (_request, reply) => {
-    const [sources, locations, materials, batches, movements, projects, requirements, consumptions, colorChanges, attachments, auditLogs] = await Promise.all([
+    const [sources, locations, materials, inspections, inspectionSamples, inspectionDefects, batches, movements, projects, requirements, consumptions, colorChanges, attachments, auditLogs] = await Promise.all([
       pool.query("SELECT * FROM sources ORDER BY created_at"),
       pool.query("SELECT * FROM storage_locations ORDER BY created_at"),
       pool.query("SELECT * FROM materials ORDER BY created_at"),
+      pool.query("SELECT * FROM inspections ORDER BY created_at"),
+      pool.query("SELECT * FROM inspection_samples ORDER BY created_at"),
+      pool.query("SELECT * FROM inspection_defects ORDER BY created_at"),
       pool.query("SELECT * FROM batches ORDER BY created_at"),
       pool.query("SELECT * FROM stock_movements ORDER BY created_at"),
       pool.query("SELECT * FROM projects ORDER BY created_at"),
@@ -155,6 +160,9 @@ export async function insightRoutes(app: FastifyInstance): Promise<void> {
       sources: sources.rows,
       locations: locations.rows,
       materials: materials.rows,
+      inspections: inspections.rows,
+      inspectionSamples: inspectionSamples.rows,
+      inspectionDefects: inspectionDefects.rows,
       batches: batches.rows,
       stockMovements: movements.rows,
       projects: projects.rows,

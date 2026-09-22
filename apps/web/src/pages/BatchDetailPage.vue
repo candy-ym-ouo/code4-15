@@ -155,6 +155,7 @@ onMounted(load);
         <h2>批次信息</h2>
         <el-descriptions :column="3" border>
           <el-descriptions-item label="材料"><router-link :to="`/materials/${batch.materialId}`">{{ batch.materialName }}</router-link></el-descriptions-item>
+          <el-descriptions-item label="来料质检"><router-link v-if="batch.inspectionId" :to="`/inspections/${batch.inspectionId}`">查看质检单</router-link><span v-else>历史批次</span></el-descriptions-item>
           <el-descriptions-item label="入库日期">{{ batch.receivedAt }}</el-descriptions-item>
           <el-descriptions-item label="有效期">{{ batch.expiryAt || "无" }}</el-descriptions-item>
           <el-descriptions-item label="存放位置">{{ batch.locationName || "未指定" }}</el-descriptions-item>

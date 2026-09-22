@@ -40,6 +40,18 @@ export type ColorChangeType = (typeof colorChangeTypes)[number];
 export const attachmentOwnerTypes = ["BATCH", "COLOR_CHANGE", "PROJECT", "CONSUMPTION"] as const;
 export type AttachmentOwnerType = (typeof attachmentOwnerTypes)[number];
 
+export const inspectionStatuses = ["PENDING", "INSPECTING", "ACCEPTED", "CONCESSION_ACCEPTED", "REJECTED"] as const;
+export type InspectionStatus = (typeof inspectionStatuses)[number];
+
+export const inspectionSampleResults = ["PENDING", "PASS", "FAIL"] as const;
+export type InspectionSampleResult = (typeof inspectionSampleResults)[number];
+
+export const defectSeverities = ["MINOR", "MAJOR", "CRITICAL"] as const;
+export type DefectSeverity = (typeof defectSeverities)[number];
+
+export const inspectionDispositions = ["ACCEPT", "CONCESSION", "REJECT"] as const;
+export type InspectionDisposition = (typeof inspectionDispositions)[number];
+
 export const unitFamilies = {
   g: { family: "MASS", base: "g", factor: "1" },
   kg: { family: "MASS", base: "g", factor: "1000" },
@@ -183,6 +195,61 @@ export const adjustmentSchema = z.object({
   unit: z.enum(stockUnits),
   reason: z.string().trim().min(3).max(1000),
   version: z.number().int().positive()
+});
+
+export const inspectionCreateSchema = z.object({
+  inspectionNo: z.string().trim().min(1).max(40),
+  materialId: z.string().uuid(),
+  batchCode: z.string().trim().max(64).nullable().optional(),
+  sourceId: z.string().uuid().nullable().optional(),
+  sourceNote: z.string().trim().max(200).nullable().optional(),
+  locationId: z.string().uuid().nullable().optional(),
+  receivedAt: z.string().date(),
+  expiryAt: z.string().date().nullable().optional(),
+  deliveredQuantity: positiveQuantity,
+  entryUnit: z.enum(stockUnits),
+  totalCost: moneyAmount.nullable().optional(),
+  currency: z.string().trim().regex(/^[A-Za-z]{3}$/, "币种必须是 3 位字母代码").transform((value) => value.toUpperCase()).nullable().optional(),
+  initialColorName: z.string().trim().max(80).nullable().optional(),
+  initialColorHex: z.union([colorHex, z.literal("")]).nullable().optional(),
+  notes: z.string().trim().max(5000).nullable().optional()
+});
+
+export const inspectionSampleSchema = z.object({
+  sampleNo: z.string().trim().min(1).max(40),
+  sampleQuantity: positiveQuantity.nullable().optional(),
+  unit: z.enum(stockUnits).nullable().optional(),
+  result: z.enum(inspectionSampleResults).default("PENDING"),
+  inspectedAt: z.string().datetime({ offset: true }).optional(),
+  notes: z.string().trim().max(3000).nullable().optional()
+});
+
+export const inspectionDefectSchema = z.object({
+  defectType: z.string().trim().min(1).max(80),
+  severity: z.enum(defectSeverities).default("MINOR"),
+  defectCount: z.number().int().positive().max(1_000_000).default(1),
+  affectedQuantity: positiveQuantity.nullable().optional(),
+  unit: z.enum(stockUnits).nullable().optional(),
+  description: z.string().trim().max(3000).nullable().optional()
+});
+
+export const inspectionDispositionSchema = z.object({
+  disposition: z.enum(inspectionDispositions),
+  note: z.string().trim().max(5000).nullable().optional(),
+  concessionReason: z.string().trim().min(1).max(2000).nullable().optional(),
+  concessionApprover: z.string().trim().min(1).max(80).nullable().optional()
+}).superRefine((value, ctx) => {
+  if (value.disposition === "CONCESSION") {
+    if (!value.concessionReason) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "让步接收必须填写让步原因", path: ["concessionReason"] });
+    }
+    if (!value.concessionApprover) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "让步接收必须填写批准人", path: ["concessionApprover"] });
+    }
+  }
+  if (value.disposition === "REJECT" && !value.note) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "驳回必须填写处置说明", path: ["note"] });
+  }
 });
 
 export const projectInputSchema = z.object({

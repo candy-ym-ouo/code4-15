@@ -44,6 +44,7 @@ export type Batch = {
   currentColorHex: string | null;
   status: string;
   notes: string | null;
+  inspectionId: string | null;
   version: number;
   updatedAt: string;
 };
@@ -111,6 +112,71 @@ export type Consumption = {
   reversalReason: string | null;
 };
 
+export type Inspection = {
+  id: string;
+  inspectionNo: string;
+  materialId: string;
+  materialName: string;
+  materialCode: string | null;
+  craftTypes: string[];
+  batchCode: string | null;
+  sourceId: string | null;
+  sourceName: string | null;
+  sourceNote: string | null;
+  locationId: string | null;
+  locationName: string | null;
+  receivedAt: string;
+  expiryAt: string | null;
+  deliveredQuantity: string;
+  entryUnit: string;
+  totalCost: string | null;
+  currency: string | null;
+  initialColorName: string | null;
+  initialColorHex: string | null;
+  notes: string | null;
+  status: string;
+  disposition: string | null;
+  dispositionNote: string | null;
+  concessionReason: string | null;
+  concessionApprover: string | null;
+  batchId: string | null;
+  disposedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  samples?: InspectionSample[];
+  defects?: InspectionDefect[];
+  batch?: {
+    id: string;
+    batchCode: string | null;
+    remainingQuantity: string;
+    initialQuantity: string;
+    stockUnit: string;
+    status: string;
+  } | null;
+};
+
+export type InspectionSample = {
+  id: string;
+  sampleNo: string;
+  sampleQuantity: string | null;
+  stockUnit: string | null;
+  result: string;
+  inspectedAt: string;
+  notes: string | null;
+  createdAt: string;
+};
+
+export type InspectionDefect = {
+  id: string;
+  defectType: string;
+  severity: string;
+  defectCount: number;
+  affectedQuantity: string | null;
+  stockUnit: string | null;
+  description: string | null;
+  createdAt: string;
+};
+
 export const craftTypeLabels: Record<string, string> = {
   DYEING: "染布",
   WOODWORKING: "木工",
@@ -137,4 +203,24 @@ export const movementLabels: Record<string, string> = {
   ADJUSTMENT_IN: "盘增",
   ADJUSTMENT_OUT: "盘减",
   REVERSAL: "撤销恢复"
+};
+
+export const inspectionStatusLabels: Record<string, string> = {
+  PENDING: "待检验",
+  INSPECTING: "检验中",
+  ACCEPTED: "合格接收",
+  CONCESSION_ACCEPTED: "让步接收",
+  REJECTED: "已驳回"
+};
+
+export const inspectionSampleResultLabels: Record<string, string> = {
+  PENDING: "待判定",
+  PASS: "合格",
+  FAIL: "不合格"
+};
+
+export const defectSeverityLabels: Record<string, string> = {
+  MINOR: "轻微",
+  MAJOR: "主要",
+  CRITICAL: "严重"
 };

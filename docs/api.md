@@ -8,7 +8,7 @@
 - 时间：ISO 8601，推荐包含时区偏移。
 - 会话：HttpOnly Cookie `handcraft_session`。
 - 分页：`page`、`pageSize`，最大 100。
-- 幂等：批次入库、库存调整和材料消耗支持 `Idempotency-Key`。
+- 幂等：来料报检、质检处置、库存调整和材料消耗支持 `Idempotency-Key`。
 - 乐观锁：更新请求携带 `version`。
 
 成功响应：
@@ -100,30 +100,67 @@
 }
 ```
 
-## 5. 批次与库存
+## 5. 来料质检与让步接收
+
+来料必须先报检；只有“合格接收”或“让步接收”才会创建批次并入库，驳回不产生批次。处置只能执行一次。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET/POST | `/batches` | 批次查询或入库 |
+| GET/POST | `/inspections` | 质检单查询或来料报检 |
+| GET | `/inspections/:id` | 质检单详情（含样本、缺陷、批次） |
+| POST | `/inspections/:id/samples` | 登记检验样本 |
+| POST | `/inspections/:id/defects` | 登记缺陷 |
+| POST | `/inspections/:id/disposition` | 处置：ACCEPT/CONCESSION/REJECT |
+
+报检：
+
+```json
+{
+  "inspectionNo": "IQC-20260922-01",
+  "materialId": "uuid",
+  "batchCode": "供应商批号（可选）",
+  "sourceId": "uuid",
+  "receivedAt": "2026-09-22",
+  "deliveredQuantity": "1",
+  "entryUnit": "kg"
+}
+```
+
+登记样本：`{ "sampleNo": "S1", "sampleQuantity": "10", "unit": "g", "result": "PASS" }`，`result` 为 `PASS`/`FAIL`/`PENDING`。
+登记缺陷：`{ "defectType": "色差", "severity": "MINOR", "defectCount": 2 }`，严重度为 `MINOR`/`MAJOR`/`CRITICAL`。
+
+处置：
+
+```json
+{
+  "disposition": "CONCESSION",
+  "concessionReason": "轻微色差，降级使用",
+  "concessionApprover": "王工",
+  "note": "限定非外露部件使用"
+}
+```
+
+处置规则：
+
+- `ACCEPT`：至少一个样本，且无不合格样本、无缺陷；按到货数量创建批次并生成 `OPENING` 流水。
+- `CONCESSION`：至少一个样本且无 `CRITICAL` 缺陷，必须提供 `concessionReason`、`concessionApprover`；同样按到货数量入库，流水原因标注让步接收。
+- `REJECT`：必须提供 `note`；不创建批次、不产生流水，质检单保留为驳回记录。
+- 处置使用条件更新在数据库层占用质检单，并发处置只有一个事务生效；终态后处置字段冻结，重复处置返回 `409 INSPECTION_ALREADY_DISPOSED`。
+- 支持 `Idempotency-Key`：同一键并发/重试返回同一批次，不会二次入库。
+
+质检单状态：`PENDING`（待检验）、`INSPECTING`（已登记样本或缺陷）、`ACCEPTED`、`CONCESSION_ACCEPTED`、`REJECTED`。
+
+## 6. 批次与库存
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/batches` | 批次查询（入库只能通过质检处置） |
 | GET/PATCH | `/batches/:id` | 详情或非库存字段更新 |
 | GET | `/batches/:id/movements` | 库存流水 |
 | POST | `/batches/:id/adjustments` | 库存调整 |
 | POST | `/batches/:id/archive` | 归档无余额批次 |
 
-创建批次：
-
-```json
-{
-  "materialId": "uuid",
-  "batchCode": "B-20260913-01",
-  "sourceId": "uuid",
-  "receivedAt": "2026-09-13",
-  "initialQuantity": "1",
-  "entryUnit": "kg",
-  "totalCost": "120.00",
-  "currency": "CNY"
-}
-```
+`POST /batches` 已关闭并返回 `405 INSPECTION_REQUIRED`；批次的 `inspectionId` 指向来源质检单。批次与质检单由数据库触发器双向校验：批次只能挂在接收类质检单上，一张质检单最多产生一个批次，驳回质检单永远没有批次。
 
 库存调整：
 
@@ -139,7 +176,7 @@
 
 同一 `Idempotency-Key` 重试不会重复调整。
 
-## 6. 项目与需求
+## 7. 项目与需求
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -162,7 +199,7 @@
 }
 ```
 
-## 7. 消耗与撤销
+## 8. 消耗与撤销
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -195,7 +232,7 @@
 }
 ```
 
-## 8. 颜色变化
+## 9. 颜色变化
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -221,7 +258,7 @@
 
 颜色变化不扣库存。
 
-## 9. 附件和导出
+## 10. 附件和导出
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |

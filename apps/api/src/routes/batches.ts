@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { addQuantities, adjustmentSchema, batchCreateSchema, batchPatchSchema, compareQuantities, convertQuantity, subtractQuantities } from "@handcraft/contracts";
+import { addQuantities, adjustmentSchema, batchPatchSchema, compareQuantities, convertQuantity, subtractQuantities } from "@handcraft/contracts";
 import type { AuthenticatedRequest } from "../lib/auth.js";
 import { pool, withTransaction } from "../lib/db.js";
 import { AppError } from "../lib/errors.js";
@@ -82,7 +82,7 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
               b.expiry_at AS "expiryAt", b.initial_quantity::text AS "initialQuantity",
               b.remaining_quantity::text AS "remainingQuantity", b.stock_unit AS "stockUnit", b.entry_unit AS "entryUnit",
               b.current_color_name AS "currentColorName", b.current_color_hex AS "currentColorHex", b.status,
-              b.notes, b.created_at AS "createdAt", b.updated_at AS "updatedAt", b.version
+              b.notes, b.inspection_id AS "inspectionId", b.created_at AS "createdAt", b.updated_at AS "updatedAt", b.version
          ${base} ORDER BY ${sort} ${direction} NULLS LAST LIMIT $${values.length - 1} OFFSET $${values.length}`,
       values
     );
@@ -99,6 +99,7 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
               b.total_cost::text AS "totalCost", b.currency, b.initial_color_name AS "initialColorName",
               b.initial_color_hex AS "initialColorHex", b.current_color_name AS "currentColorName",
               b.current_color_hex AS "currentColorHex", b.color_updated_at AS "colorUpdatedAt", b.status, b.notes,
+              b.inspection_id AS "inspectionId",
               b.created_at AS "createdAt", b.updated_at AS "updatedAt", b.version
          FROM batches b JOIN materials m ON m.id = b.material_id
          LEFT JOIN sources s ON s.id = b.source_id LEFT JOIN storage_locations l ON l.id = b.location_id
@@ -131,77 +132,15 @@ export async function batchRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post("/batches", async (request, reply) => {
-    const input = parseInput(batchCreateSchema, request.body);
-    if (input.expiryAt && input.expiryAt < input.receivedAt) {
-      throw new AppError(422, "INVALID_EXPIRY_DATE", "有效期不能早于入库日期");
-    }
-    const user = (request as AuthenticatedRequest).authUser;
-    const idempotencyKey = getIdempotencyKey(request.headers);
-    const created = await withTransaction(async (client) => {
-      if (idempotencyKey) {
-        await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [idempotencyKey]);
-        const existing = await client.query(
-          `SELECT b.* FROM stock_movements sm JOIN batches b ON b.id = sm.batch_id
-            WHERE sm.idempotency_key = $1
-              AND sm.reference_type = 'BATCH'
-              AND sm.reference_id = b.id
-              AND sm.type IN ('OPENING', 'PURCHASE')
-            LIMIT 1`,
-          [idempotencyKey]
-        );
-        if (existing.rows[0]) return { data: existing.rows[0], idempotent: true };
+    // 来料必须先建立质检单并完成“合格接收/让步接收”处置，质检通过后系统才创建批次。
+    return reply.status(405).send({
+      error: {
+        code: "INSPECTION_REQUIRED",
+        message: "批次不能直接创建，请先建立来料质检单，质检通过或让步接收后自动入库",
+        fieldErrors: {},
+        requestId: request.id
       }
-
-      const materialResult = await client.query<UnitRecord & { id: string; default_color_name: string | null; default_color_hex: string | null }>(
-        `SELECT id, stock_unit, default_color_name, default_color_hex FROM materials WHERE id = $1 AND archived_at IS NULL FOR UPDATE`,
-        [input.materialId]
-      );
-      const material = materialResult.rows[0];
-      if (!material) throw new AppError(422, "INVALID_MATERIAL", "材料不存在或已归档");
-      let normalizedQuantity: string;
-      try {
-        normalizedQuantity = convertQuantity(input.initialQuantity, input.entryUnit, material.stock_unit as any);
-      } catch {
-        throw new AppError(422, "UNIT_INCOMPATIBLE", "入库单位与材料库存单位不兼容");
-      }
-      if (input.sourceId) {
-        const source = await client.query("SELECT id FROM sources WHERE id = $1 AND archived_at IS NULL FOR SHARE", [input.sourceId]);
-        if (!source.rowCount) throw new AppError(422, "INVALID_SOURCE", "来源不存在或已归档");
-      }
-      if (input.locationId) {
-        const location = await client.query("SELECT id FROM storage_locations WHERE id = $1 AND archived_at IS NULL FOR SHARE", [input.locationId]);
-        if (!location.rowCount) throw new AppError(422, "INVALID_LOCATION", "存放位置不存在或已归档");
-      }
-      const initialColorName = input.initialColorName || material.default_color_name;
-      const initialColorHex = input.initialColorHex || material.default_color_hex;
-      const batch = await client.query(
-        `INSERT INTO batches(material_id, batch_code, source_id, source_note, location_id, received_at, expiry_at,
-          initial_quantity, remaining_quantity, stock_unit, entry_unit, total_cost, currency,
-          initial_color_name, initial_color_hex, current_color_name, current_color_hex, color_updated_at, notes)
-         VALUES ($1, $2, $3, $4, $5, $6::date, $7::date, $8, $8, $9::stock_unit, $10::stock_unit, $11, $12,
-                 $13::varchar(80), $14::char(7), $13::varchar(80), $14::char(7), CASE WHEN $13 IS NULL AND $14 IS NULL THEN NULL ELSE now() END, $15)
-         RETURNING *`,
-        [
-          input.materialId, input.batchCode || null, input.sourceId || null, input.sourceNote || null,
-          input.locationId || null, input.receivedAt, input.expiryAt || null, normalizedQuantity,
-          material.stock_unit, input.entryUnit, input.totalCost ?? null, input.currency || null,
-          initialColorName, initialColorHex, input.notes || null
-        ]
-      );
-      const batchId = batch.rows[0]?.id as string;
-      await client.query(
-        `INSERT INTO stock_movements(batch_id, type, signed_quantity, stock_unit, before_quantity, after_quantity,
-          reference_type, reference_id, actor_user_id, idempotency_key)
-         VALUES ($1, 'OPENING', $2, $3::stock_unit, 0, $2, 'BATCH', $1, $4, $5)`,
-        [batchId, normalizedQuantity, material.stock_unit, user.id, idempotencyKey ?? null]
-      );
-      await writeAudit(client, {
-        actorUserId: user.id, action: "CREATE", entityType: "BATCH", entityId: batchId,
-        afterData: batch.rows[0], requestId: request.id
-      });
-      return { data: batch.rows[0], idempotent: false };
     });
-    return reply.status(created.idempotent ? 200 : 201).send({ data: created.data });
   });
 
   app.patch<{ Params: { id: string } }>("/batches/:id", async (request) => {
